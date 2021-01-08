@@ -1,0 +1,78 @@
+name: "Continuous Integration"
+
+on:
+  pull_request:
+    branches:
+      - "*.x"
+      - "master"
+  push:
+
+env:
+  fail-fast: true
+
+jobs:
+  phpunit:
+    name: "PHPUnit"
+    runs-on: "ubuntu-20.04"
+
+    strategy:
+      matrix:
+        php-version:
+          - "7.1"
+          - "7.2"
+          - "7.3"
+          - "7.4"
+        symfony-version:
+          - "3.4.x"
+          - "4.4.x"
+          - "5.2.x"
+        transport:
+          - "jackrabbit"
+          - "doctrine_dbal"
+        deps:
+          - "highest"
+        include:
+          - deps: "low"
+            php-version: "7.1"
+            symfony-version: "3.4.x"
+            transport: "jackrabbit"
+          - deps: "low"
+            php-version: "7.1"
+            symfony-version: "3.4.x"
+            transport: "doctrine_dbal"
+
+    services:
+      mysql:
+        image: "mysql:8.0"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v2"
+        with:
+          fetch-depth: 2
+
+      - name: "Install PHP"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          php-version: "${{ matrix.php-version }}"
+          extensions: "pdo_mysql"
+          coverage: "none"
+
+      - name: "Require Doctrine DBAL"
+        run: "composer require jackalope/jackalope-doctrine-dbal:~1.0 --no-update"
+        if: "${{ matrix.transport == 'doctrine_dbal' }}"
+
+      - name: "Require Jackrabbit"
+        run: "composer require jackalope/jackalope-jackrabbit:~1.0 --no-update"
+        if: "${{ matrix.transport == 'jackrabbit' }}"
+
+      - name: "Setup server"
+        run: "sh tests/setup_${{ matrix.transport }}.sh"
+
+      - name: "Install dependencies with Composer"
+        uses: "ramsey/composer-install@v1"
+        with:
+          dependency-versions: "${{ matrix.deps }}"
+
+      - name: "Run PHPUnit"
+        run: "vendor/bin/phpunit -c tests/phpunit_${{ matrix.transport }}.xml.dist"
